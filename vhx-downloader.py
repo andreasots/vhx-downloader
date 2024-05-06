@@ -3,6 +3,7 @@ import time
 import argparse
 
 import requests
+import schedule
 import yt_dlp
 
 parser = argparse.ArgumentParser(prog='vhx-downloader', description='Download videos from Vimeo OTT')
@@ -13,6 +14,9 @@ parser.add_argument("--password", dest='password', help="", required=True)
 parser.add_argument("--site-id", dest='site_id', help="Site ID", required=True)
 parser.add_argument("--series-id", dest='series', help="Series ID to download", action="append", required=True)
 parser.add_argument("--dest-dir", dest='dest_dir', help="Destination directory", required=True)
+parser.add_argument("--watch", dest='watch', help="Watch for new episodes", action='store_true')
+parser.add_argument("--watch-at", dest='watch_at', help="Time when to check for new episodes", default="00:00")
+parser.add_argument("--watch-timezone", dest='watch_timezone', help="Timezone the watch at time is in.", default="Etc/GMT")
 
 def fetch_paginated(session, url, key):
     items = []
@@ -65,9 +69,7 @@ class VhxAuth(requests.auth.AuthBase):
         return request
 
 
-def main():
-    args = parser.parse_args()
-
+def main(args):
     with requests.Session() as session:
         session.auth = VhxAuth(session, args.client_id, args.client_secret, args.username, args.password)
 
@@ -116,4 +118,13 @@ def main():
                                 raise RuntimeError("failed to find a DASH stream")
 
 if __name__ == '__main__':
-    main()
+    args = parser.parse_args()
+    if args.watch:
+        schedule.every().day.at(args.watch_at, args.watch_timezone).do(main, args)
+
+        while True:
+            print('Waiting until', schedule.next_run())
+            time.sleep(schedule.idle_seconds())
+            schedule.run_pending()
+    else:
+        main(args)

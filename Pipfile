@@ -6,6 +6,8 @@ name = "pypi"
 [packages]
 requests = "*"
 yt-dlp = "*"
+schedule = "*"
+pytz = "*"
 
 [dev-packages]
 
