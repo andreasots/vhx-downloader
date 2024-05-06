@@ -119,6 +119,9 @@ def main(args):
 
 if __name__ == '__main__':
     args = parser.parse_args()
+
+    main(args)
+
     if args.watch:
         schedule.every().day.at(args.watch_at, args.watch_timezone).do(main, args)
 
@@ -126,5 +129,3 @@ if __name__ == '__main__':
             print('Waiting until', schedule.next_run())
             time.sleep(schedule.idle_seconds())
             schedule.run_pending()
-    else:
-        main(args)
