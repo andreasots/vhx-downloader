@@ -14,8 +14,10 @@ RUN pipenv sync
 
 FROM docker.io/python:3.11.9-alpine3.19
 
-RUN apk add ffmpeg
+RUN apk add tini ffmpeg
 
 COPY --from=builder /usr/src/ /usr/src/
 
 WORKDIR /usr/src/
+
+ENTRYPOINT [ "tini", "--" ]
