@@ -1,6 +1,8 @@
 import os.path
 import time
 import argparse
+import urllib.parse
+import re
 
 import requests
 import schedule
@@ -12,7 +14,8 @@ parser.add_argument("--client-secret", dest='client_secret', help="OAuth2 client
 parser.add_argument("--username", dest='username', help="", required=True)
 parser.add_argument("--password", dest='password', help="", required=True)
 parser.add_argument("--site-id", dest='site_id', help="Site ID", required=True)
-parser.add_argument("--series-id", dest='series', help="Series ID to download", action="append", required=True)
+parser.add_argument("--series-id", dest='series', help="Series ID to download", action="append", required=False)
+parser.add_argument("--series-slug", dest='slugs', help="Series slug to download (eg. 'game-changer' in 'dropout.tv/game-changer')", action="append", required=False)
 parser.add_argument("--dest-dir", dest='dest_dir', help="Destination directory", required=True)
 parser.add_argument("--watch", dest='watch', help="Watch for new episodes", action='store_true')
 parser.add_argument("--watch-at", dest='watch_at', help="Time when to check for new episodes", default="00:00")
@@ -73,7 +76,25 @@ def main(args):
     with requests.Session() as session:
         session.auth = VhxAuth(session, args.client_id, args.client_secret, args.username, args.password)
 
-        for series_id in args.series:
+        series = args.series or []
+
+        if args.slugs:
+            for slug in args.slugs:
+                # Unfortunately using the slug instead of the collection ID doesn't seem to work for collection lookup
+                # but for some reason it does work for collections items lookup. Truly a Vimeo OTT moment.
+                res = session.get(f'https://api.vhx.tv/collections/{slug}/items', params={'site_id': args.site_id})
+                res.raise_for_status()
+                self_url = urllib.parse.urlparse(res.json()['_links']['self']['href'])
+                if match := re.match(r'^/collections/(\d+)/items$', self_url.path):
+                    series.append(match[1])
+                else:
+                    raise RuntimeError('failed to extract the series ID from {self_url.path!r} for series {slug!r}')
+
+        if not series:
+            print("No series selected, stopping.")
+            return
+
+        for series_id in series:
             seasons = fetch_paginated(session, f"https://api.vhx.com/v2/sites/{args.site_id}/collections/{series_id}/items", 'items')
             for season in seasons:
                 if season['entity_type'] == 'collection':
