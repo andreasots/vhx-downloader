@@ -95,6 +95,10 @@ def main(args):
             return
 
         for series_id in series:
+            r = session.get(f"https://api.vhx.com/v2/sites/{args.site_id}/collections/{series_id}")
+            r.raise_for_status()
+            series_title = r.json()['title']
+
             seasons = fetch_paginated(session, f"https://api.vhx.com/v2/sites/{args.site_id}/collections/{series_id}/items", 'items')
             for season in seasons:
                 if season['entity_type'] == 'collection':
@@ -103,7 +107,7 @@ def main(args):
                         if episode['entity_type'] == 'video':
                             meta = episode['entity']['metadata']
                             output_file_root = f'S{meta["season"]["number"] or 0:02}E{meta["season"]["episode_number"] or 0:02} - {episode["entity"]["title"]}'.replace('/', '_')
-                            path = os.path.join(args.dest_dir, meta["series"]["name"], f'{output_file_root}.mkv')
+                            path = os.path.join(args.dest_dir, series_title, f'{output_file_root}.mkv')
                             
                             print("Downloading", path)
 
@@ -121,7 +125,7 @@ def main(args):
                                             'default': f'{output_file_root}.%(ext)s',
                                         },
                                         'paths': {
-                                            'home': os.path.join(args.dest_dir, meta["series"]["name"]),
+                                            'home': os.path.join(args.dest_dir, series_title),
                                             'temp': '/tmp',
                                         },
                                         'merge_output_format': 'mkv',
