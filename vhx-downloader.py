@@ -16,6 +16,8 @@ parser.add_argument("--password", dest='password', help="", required=True)
 parser.add_argument("--site-id", dest='site_id', help="Site ID", required=True)
 parser.add_argument("--series-id", dest='series', help="Series ID to download", action="append", required=False)
 parser.add_argument("--series-slug", dest='slugs', help="Series slug to download (eg. 'game-changer' in 'dropout.tv/game-changer')", action="append", required=False)
+parser.add_argument("--video-id", dest='videos', help="Video ID to download", action="append", required=False)
+parser.add_argument("--video-slug", dest='video_slugs', help="Video ID to download", action="append", required=False)
 parser.add_argument("--dest-dir", dest='dest_dir', help="Destination directory", required=True)
 parser.add_argument("--watch", dest='watch', help="Watch for new episodes", action='store_true')
 parser.add_argument("--watch-at", dest='watch_at', help="Time when to check for new episodes", default="00:00")
@@ -71,6 +73,34 @@ class VhxAuth(requests.auth.AuthBase):
 
         return request
 
+def download_video(session, site_id, video_id, dest_dir, file_name_template):
+    r = session.get(f"https://api.vhx.com/v2/sites/{site_id}/videos/{video_id}/delivery", params={"offline_license": "1"})
+    r.raise_for_status()
+    streams = r.json()
+    for stream in streams['streams']:
+        if stream['method'] == 'dash':
+            options = {
+                'outtmpl': {
+                    'default': file_name_template,
+                },
+                'paths': {
+                    'home': dest_dir,
+                    'temp': '/tmp',
+                },
+                'merge_output_format': 'mkv',
+                'format': 'bestvideo+bestaudio',
+                'writesubtitles': True,
+                'postprocessors': [
+                    # --embed-subs
+                    {"key": "FFmpegEmbedSubtitle"},
+                ],
+            }
+            with yt_dlp.YoutubeDL(options) as ytdl:
+                ytdl.download([stream['url']])
+            break
+    else:
+        raise RuntimeError("failed to find a DASH stream")
+
 
 def main(args):
     with requests.Session() as session:
@@ -89,10 +119,6 @@ def main(args):
                     series.append(match[1])
                 else:
                     raise RuntimeError('failed to extract the series ID from {self_url.path!r} for series {slug!r}')
-
-        if not series:
-            print("No series selected, stopping.")
-            return
 
         for series_id in series:
             r = session.get(f"https://api.vhx.com/v2/sites/{args.site_id}/collections/{series_id}")
@@ -115,32 +141,23 @@ def main(args):
                                 print(f'{path} already exists, skipping...')
                                 continue
 
-                            r = session.get(f"https://api.vhx.com/v2/sites/{args.site_id}/videos/{episode['entity_id']}/delivery", params={"offline_license": "1"})
-                            r.raise_for_status()
-                            streams = r.json()
-                            for stream in streams['streams']:
-                                if stream['method'] == 'dash':
-                                    options = {
-                                        'outtmpl': {
-                                            'default': f'{output_file_root}.%(ext)s',
-                                        },
-                                        'paths': {
-                                            'home': os.path.join(args.dest_dir, series_title),
-                                            'temp': '/tmp',
-                                        },
-                                        'merge_output_format': 'mkv',
-                                        'format': 'bestvideo+bestaudio',
-                                        'writesubtitles': True,
-                                        'postprocessors': [
-                                            # --embed-subs
-                                            {"key": "FFmpegEmbedSubtitle"},
-                                        ],
-                                    }
-                                    with yt_dlp.YoutubeDL(options) as ytdl:
-                                        ytdl.download([stream['url']])
-                                    break
-                            else:
-                                raise RuntimeError("failed to find a DASH stream")
+                            download_video(session, args.site_id, episode['entity_id'], os.path.join(args.dest_dir, series_title), f'{output_file_root}.%(ext)s')
+        else:
+            print("No series selected.")
+
+        videos = args.videos or []
+        if args.video_slugs:
+            for slug in args.video_slugs:
+                r = session.get(f"https://api.vhx.com/videos/{slug}?url={slug}")
+                r.raise_for_status()
+                videos.append(r.json()['id'])
+
+        for video_id in videos:
+            r = session.get(f"https://api.vhx.com/v2/sites/{args.site_id}/videos/{video_id}")
+            r.raise_for_status()
+            video_title = r.json()['title']
+
+            download_video(session, args.site_id, video_id, args.dest_dir, f'{video_title}.%(ext)s')
 
 if __name__ == '__main__':
     args = parser.parse_args()
