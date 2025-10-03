@@ -74,7 +74,15 @@ class VhxAuth(requests.auth.AuthBase):
         return request
 
 def download_video(session, site_id, video_id, dest_dir, file_name_template):
-    r = session.get(f"https://api.vhx.com/v2/sites/{site_id}/videos/{video_id}/delivery", params={"offline_license": "1"})
+    r = session.get(f"https://api.vhx.com/v2/sites/{site_id}/videos/{video_id}/delivery", params={
+        "offline_license": "1",
+        "model": "XQ-BC52",
+        "max_width": "3840",
+        "max_height": "2160",
+        "max_fps": "60",
+        "codecs": "avc,hevc",
+        "os_version": "13",
+    })
     r.raise_for_status()
     streams = r.json()
     for stream in streams['streams']:
@@ -104,6 +112,11 @@ def download_video(session, site_id, video_id, dest_dir, file_name_template):
 
 def main(args):
     with requests.Session() as session:
+        session.headers['X-OTT-Agent'] = f"android site/{args.site_id} android-app/9.104.1"
+        session.headers['User-Agent'] = 'okhttp/4.12.0'
+        session.headers['OTT-Client-Version'] = "9.104.1"
+        session.headers['X-OTT-Language'] = "en_US"
+
         session.auth = VhxAuth(session, args.client_id, args.client_secret, args.username, args.password)
 
         series = args.series or []
